@@ -6,6 +6,7 @@ interface DocDbEditorProps {
   onChange: (value: string) => void;
   collections?: any[];
   language?: string;
+  onExecute?: () => void;
 }
 
 const MONGO_KEYWORDS = [
@@ -26,6 +27,7 @@ const DocDbEditor: React.FC<DocDbEditorProps> = ({
   onChange,
   collections = [],
   language,
+  onExecute,
 }) => {
   const isDark = document.documentElement.getAttribute("data-theme") === "dark";
   const monacoRef = useRef<any>(null);
@@ -155,6 +157,13 @@ const DocDbEditor: React.FC<DocDbEditorProps> = ({
     });
 
     monaco.editor.setTheme(isDark ? "db-dark" : "db-light");
+
+    if (onExecute) {
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+        onExecute();
+      });
+    }
+
     registerCompletions(monaco, language || "javascript");
   };
 

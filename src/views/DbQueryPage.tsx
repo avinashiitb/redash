@@ -5,6 +5,8 @@ import ResultSection from "../components/ResultSection";
 import SchemaSidebar from "../components/SchemaSidebar";
 import ConnectionManagement from "../components/ConnectionManagement";
 import { ipc } from "../ipc";
+import { exportToCsv, exportToJson } from "../utils/exportUtils";
+import { extractSavedData } from "../utils/docUtils";
 import "./DbQueryPage.css";
 
 interface DbQueryPageProps {
@@ -128,24 +130,20 @@ const DbQueryPage: React.FC<DbQueryPageProps> = ({
             if (data && data.length > 0) {
               const document = data[0];
               setContentDoc(document);
-              let parsed = document?.blocks?.[0]?.data;
-              if (typeof parsed === "string") {
-                try {
-                  parsed = JSON.parse(parsed);
-                } catch (e) {}
-              }
-              savedData = parsed;
+              savedData = extractSavedData(document);
             }
           } else if (!api.getDocumentsByParentFile) {
-            savedData = await ipc.invoke("load-data");
+            const raw = await ipc.invoke("load-data");
+            savedData = extractSavedData({ blocks: [{ data: raw }] });
           }
         } else {
-          savedData = await ipc.invoke("load-data");
+          const raw = await ipc.invoke("load-data");
+          savedData = extractSavedData({ blocks: [{ data: raw }] });
         }
 
-        if (savedData && Object.keys(savedData).length > 0) {
-          if (savedData.query) setQuery(savedData.query);
-          if (savedData.result) setResult(savedData.result);
+        if (savedData && (savedData.query !== undefined || savedData.result !== undefined)) {
+          if (savedData.query !== undefined) setQuery(savedData.query);
+          if (savedData.result !== undefined) setResult(savedData.result);
         } else {
           setQuery(
             "-- Write your SQL query here\nSELECT * FROM table_name LIMIT 10;",
@@ -171,10 +169,11 @@ const DbQueryPage: React.FC<DbQueryPageProps> = ({
       const payloadData = { query, result, selectedConnectionId, selectedDatabase };
       const api = (window as any).pluginAPI;
       if (api && api.updateDocument && fileId) {
+        const blockType = contentDoc?.blocks?.[0]?.type || "redash";
         const updatedContents = {
           version: "1.0.0",
           time: Date.now(),
-          blocks: [{ type: "data-bridge", data: payloadData }],
+          blocks: [{ type: blockType, data: payloadData }],
           parent_file: fileId,
           _id: contentDoc?._id,
         };
@@ -216,6 +215,63 @@ const DbQueryPage: React.FC<DbQueryPageProps> = ({
     }
   };
 
+  const handleRunQueryRef = useRef(handleRunQuery);
+  useEffect(() => {
+    handleRunQueryRef.current = handleRunQuery;
+  }, [handleRunQuery]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        handleRunQueryRef.current();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const handleExport = () => {
+    const payloadData = { query, result, selectedConnectionId, selectedDatabase, route: "sql" };
+    const payload = {
+      ...contentDoc,
+      _id: contentDoc?._id || "",
+      version: contentDoc?.version || "1.0.0",
+      time: Date.now(),
+      parent_file: fileId || contentDoc?.parent_file || "",
+      blocks: [{ type: "redash", data: payloadData }],
+      createdAt: contentDoc?.createdAt || Date.now(),
+      updatedAt: Date.now(),
+      fileType: contentDoc?.fileType || "redash"
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const safeFileName = fileName ? fileName.replace(/\s+/g, '_').toLowerCase() : 'sql_query';
+    link.download = `${safeFileName}_export.ds`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportCsv = () => {
+    let rows: any[] = [];
+    let cols: any[] = [];
+    if (Array.isArray(result)) {
+      rows = result;
+    } else if (result?.data) {
+      rows = result.data;
+      cols = result.columns || [];
+    }
+    exportToCsv(rows, cols, fileName || "sql_query");
+  };
+
+  const handleExportJson = () => {
+    exportToJson(result?.data || result || [], fileName || "sql_query");
+  };
+
   return (
     <div className="app">
       <DBTopbar
@@ -230,6 +286,9 @@ const DbQueryPage: React.FC<DbQueryPageProps> = ({
         onExecute={handleRunQuery}
         fileName={fileName}
         breadcrumbs={breadcrumbs}
+        onExport={handleExport}
+        onExportCsv={handleExportCsv}
+        onExportJson={handleExportJson}
       />
 
       <div className="body">
@@ -265,7 +324,7 @@ const DbQueryPage: React.FC<DbQueryPageProps> = ({
                   borderBottom: "1px solid var(--border)",
                 }}
               >
-                <QueryEditor value={query} onChange={setQuery} schemaTables={[]} selectedConnectionId={selectedConnectionId} selectedDatabase={selectedDatabase} />
+                <QueryEditor value={query} onChange={setQuery} schemaTables={[]} selectedConnectionId={selectedConnectionId} selectedDatabase={selectedDatabase} onExecute={handleRunQuery} />
               </div>
 
               <div 
@@ -274,8 +333,8 @@ const DbQueryPage: React.FC<DbQueryPageProps> = ({
                 style={{ cursor: 'row-resize', height: '4px', zIndex: 10, position: 'relative' }}
               ></div>
 
-              <div className="col" style={{ flex: 1, minHeight: 0 }}>
-                <ResultSection result={result} isExecuting={isExecuting} />
+              <div className="col" style={{ flex: 1, minHeight: 0, height: 'calc(100% - ' + editorHeight + '%)', display: 'flex', flexDirection: 'column' }}>
+                <ResultSection result={result} isExecuting={isExecuting} fileName={fileName} theme={theme as 'light' | 'dark'} />
               </div>
             </main>
 

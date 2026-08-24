@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import DbQueryPage from './views/DbQueryPage';
 import DocDbPage from './docdb/DocDbPage';
 import { ipc } from './ipc';
+import { extractSavedData, isDbMatch } from './utils/docUtils';
 
 interface AppProps {
   fileId?: string;
@@ -65,14 +66,11 @@ function App({
         if (api && fileId && api.getDocumentsByParentFile) {
           const docs = await api.getDocumentsByParentFile(fileId);
           if (docs && docs.length > 0) {
-            let parsed = docs[0]?.blocks?.[0]?.data;
-            if (typeof parsed === "string") {
-              try { parsed = JSON.parse(parsed); } catch (e) {}
-            }
-            savedData = parsed;
+            savedData = extractSavedData(docs[0]);
           }
         } else {
-          savedData = await ipc.invoke("load-data");
+          const raw = await ipc.invoke("load-data");
+          savedData = extractSavedData({ blocks: [{ data: raw }] });
         }
 
         if (savedData) {
@@ -99,19 +97,13 @@ function App({
           if (Array.isArray(dbs) && dbs.length > 0) {
             const selConn = connections.find(c => c.id === selectedConnectionId);
             const pinned = selConn?.database;
-            const alreadyValid = selectedDatabase && dbs.includes(selectedDatabase);
+            const alreadyValid = selectedDatabase && dbs.some(d => isDbMatch(d, selectedDatabase));
             const defaultDb = alreadyValid
               ? selectedDatabase
-              : (pinned && dbs.some(d => {
-                  const parts = d.split('||');
-                  return parts[0] === pinned || parts[1] === pinned;
-                })
-                  ? dbs.find(d => {
-                      const parts = d.split('||');
-                      return parts[0] === pinned || parts[1] === pinned;
-                    })
+              : (pinned && dbs.some(d => isDbMatch(d, pinned))
+                  ? dbs.find(d => isDbMatch(d, pinned))
                   : dbs[0]);
-            setSelectedDatabase(defaultDb);
+            setSelectedDatabase(defaultDb || null);
           } else {
             setSelectedDatabase(null);
           }

@@ -1,7 +1,7 @@
 {
   "id": "redash",
   "name": "Redash",
-  "version": "1.0.0",
+  "version": "1.1.2",
   "description": "Redash client for running queries, browsing schemas, and viewing results.",
   "fileType": "redash",
   "route": "/redash/:file_id",

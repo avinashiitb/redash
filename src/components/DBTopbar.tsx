@@ -2,14 +2,17 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   Database,
   Bolt,
-  Sun,
-  Moon,
   Sparkles,
-  Settings,
   Play,
   ChevronDown,
   Check,
   Folder,
+  Sun,
+  Moon,
+  Settings,
+  Download,
+  FileSpreadsheet,
+  FileCode,
 } from "lucide-react";
 import "./DBTopbar.css";
 
@@ -25,6 +28,9 @@ interface DBTopbarProps {
   onExecute?: () => void;
   fileName?: string;
   breadcrumbs?: { label: string; isFile?: boolean }[];
+  onExport?: () => void;
+  onExportCsv?: () => void;
+  onExportJson?: () => void;
 }
 
 const DBTopbar: React.FC<DBTopbarProps> = ({
@@ -39,9 +45,14 @@ const DBTopbar: React.FC<DBTopbarProps> = ({
   onExecute,
   fileName = "Untitled",
   breadcrumbs = [],
+  onExport,
+  onExportCsv,
+  onExportJson,
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
   const safeConnections = Array.isArray(connections) ? connections : [];
 
   useEffect(() => {
@@ -52,101 +63,92 @@ const DBTopbar: React.FC<DBTopbarProps> = ({
       ) {
         setIsDropdownOpen(false);
       }
+      if (
+        exportMenuRef.current &&
+        !exportMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsExportMenuOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selectedConnection =
-    safeConnections.find((c) => c.id === selectedConnectionId) ??
-    (safeConnections.length > 0 ? safeConnections[0] : null);
-  const hostName = selectedConnection?.host
-    ? selectedConnection.host.split("@").pop()
-    : "localhost";
+  const selectedConnection = safeConnections.find(
+    (c) => c.id === selectedConnectionId,
+  );
+
+  let hostName = "localhost";
+  if (selectedConnection) {
+    if (selectedConnection.host) {
+      hostName = selectedConnection.host;
+    } else if (selectedConnection.connection_string) {
+      try {
+        const match = selectedConnection.connection_string.match(/@([^:/]+)/);
+        if (match && match[1]) {
+          hostName = match[1];
+        }
+      } catch (e) {}
+    }
+  }
 
   return (
     <header className="header">
-      {/* Breadcrumb path */}
-      <nav
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 0,
-          fontSize: 12,
-          overflow: "visible",
-          flexWrap: "nowrap",
-          userSelect: "none",
-        }}
-        aria-label="file path"
-      >
-        <Folder size={11} style={{ marginRight: 6, opacity: 0.7, color: "var(--fg-3)" }} />
-        {(breadcrumbs.length > 0
-          ? breadcrumbs
-          : [{ label: fileName || "Untitled", isFile: true }]
-        ).map((seg, idx) => (
-          <React.Fragment key={idx}>
-            {!seg.isFile && (
-              <>
-                <span
-                  style={{
-                    whiteSpace: "nowrap",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    color: "var(--fg-3)",
-                    cursor: "default",
-                  }}
-                  title={seg.label}
-                >
-                  {seg.label}
-                </span>
-                <span style={{ color: "var(--fg-3)", opacity: 0.5, margin: "0 4px", fontSize: 13, userSelect: "none" }}>›</span>
-              </>
-            )}
-            {seg.isFile && (
+      <div className="row gap-1 dim" style={{ fontSize: 11 }}>
+        {breadcrumbs.length > 0 ? (
+          breadcrumbs.map((b, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <span style={{ opacity: 0.4 }}>/</span>}
               <span
-                style={{
-                  whiteSpace: "nowrap",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: "var(--fg)",
-                  cursor: "default",
-                }}
-                title={seg.label}
+                className="row gap-1"
+                style={{ color: b.isFile ? "var(--fg)" : "var(--fg-2)" }}
               >
-                {seg.label}
+                {b.isFile ? (
+                  <span className="dot" style={{ background: "var(--accent)" }} />
+                ) : (
+                  <Folder size={11} />
+                )}
+                {b.label}
               </span>
-            )}
+            </React.Fragment>
+          ))
+        ) : (
+          <React.Fragment>
+            <Folder size={11} />
+            <span>queries</span>
+            <span style={{ opacity: 0.4 }}>/</span>
+            <span className="dot" style={{ background: "var(--accent)" }} />
+            <span style={{ color: "var(--fg)" }}>{fileName}</span>
           </React.Fragment>
-        ))}
-      </nav>
-
-      <span className="vdiv"></span>
-      <div className="seg" style={{ padding: "1px 2px", height: 26 }}>
-        <button
-          className={view === "query" ? "on" : ""}
-          onClick={() => setView && setView("query")}
-          style={{ height: 22, display: "flex", alignItems: "center", gap: 6 }}
-        >
-          <Bolt size={11} /> Query
-        </button>
-        <button
-          className={view === "connections" ? "on" : ""}
-          onClick={() => setView && setView("connections")}
-          style={{ height: 22, display: "flex", alignItems: "center", gap: 6 }}
-        >
-          <Database size={11} /> Connections
-        </button>
+        )}
       </div>
 
-      <div className="grow"></div>
+      {setView && (
+        <React.Fragment>
+          <span className="vdiv" style={{ margin: "0 8px" }} />
+          <div className="seg">
+            <button
+              className={view === "query" ? "on" : ""}
+              onClick={() => setView("query")}
+            >
+              <Bolt size={11} /> Query
+            </button>
+            <button
+              className={view === "connections" ? "on" : ""}
+              onClick={() => setView("connections")}
+            >
+              <Database size={11} /> Connections
+            </button>
+          </div>
+        </React.Fragment>
+      )}
+
+      <div className="grow" />
 
       {selectedConnection && (
         <div style={{ position: "relative" }} ref={dropdownRef}>
           <button
-            className="chip"
-            title="Select active connection"
+            className="chip row gap-1"
             style={{
               padding: "0 8px",
               height: 26,
@@ -201,16 +203,35 @@ const DBTopbar: React.FC<DBTopbarProps> = ({
                 gap: 2,
               }}
             >
+              <div
+                style={{
+                  padding: "4px 8px",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: "var(--fg-3)",
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                }}
+              >
+                Switch Connection
+              </div>
               {safeConnections.map((c) => {
-                const cHost = c.host ? c.host.split("@").pop() : "localhost";
+                let cHost = "localhost";
+                if (c.host) cHost = c.host;
+                else if (c.connection_string) {
+                  try {
+                    const match = c.connection_string.match(/@([^:/]+)/);
+                    if (match && match[1]) cHost = match[1];
+                  } catch (e) {}
+                }
                 return (
                   <button
                     key={c.id}
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: 8,
-                      padding: "8px",
+                      justifyContent: "space-between",
+                      padding: "6px 8px",
                       borderRadius: 4,
                       background:
                         c.id === selectedConnection.id
@@ -219,14 +240,12 @@ const DBTopbar: React.FC<DBTopbarProps> = ({
                       border: "none",
                       cursor: "pointer",
                       textAlign: "left",
-                      color:
-                        c.id === selectedConnection.id
-                          ? "var(--accent-fg)"
-                          : "var(--fg)",
+                      color: "var(--fg)",
                       fontFamily: "var(--font-ui)",
+                      fontSize: 12,
                     }}
                     onClick={() => {
-                      if (onSelectConnection) onSelectConnection(c.id);
+                      onSelectConnection(c.id);
                       setIsDropdownOpen(false);
                     }}
                     onMouseEnter={(e) => {
@@ -238,33 +257,27 @@ const DBTopbar: React.FC<DBTopbarProps> = ({
                         e.currentTarget.style.background = "transparent";
                     }}
                   >
-                    <span
-                      className="dot"
-                      style={{
-                        opacity: c.id === selectedConnection.id ? 1 : 0.2,
-                      }}
-                    ></span>
                     <div
                       style={{
-                        flex: 1,
-                        minWidth: 0,
                         display: "flex",
                         flexDirection: "column",
+                        gap: 2,
+                        minWidth: 0,
                       }}
                     >
                       <span
                         style={{
-                          fontSize: 12,
-                          fontWeight: 500,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
+                          fontWeight: 600,
+                          fontSize: 11,
+                          color:
+                            c.id === selectedConnection.id
+                              ? "var(--accent)"
+                              : "var(--fg)",
                         }}
                       >
                         {c.name}
                       </span>
                       <span
-                        className="mono"
                         style={{
                           fontSize: 10,
                           color: "var(--fg-3)",
@@ -315,26 +328,133 @@ const DBTopbar: React.FC<DBTopbarProps> = ({
         </React.Fragment>
       )}
 
-      {/* <button className="btn btn-ghost" style={{ marginLeft: 8 }}>
-        <Share2 size={11} /> Share
-      </button> */}
-
-      {/* <button className="btn btn-primary" style={{ marginLeft: 8 }}>
-        <Save size={11} /> Save
-        <span
-          className="kbd"
-          style={{
-            background: "rgba(0,0,0,0.15)",
-            borderColor: "transparent",
-            color: "#fff",
-            marginLeft: 4,
-          }}
-        >
-          ⌘S
-        </span>
-      </button> */}
-
       <span className="vdiv" style={{ margin: "0 8px" }}></span>
+
+      {(onExport || onExportCsv || onExportJson) && (
+        <div style={{ position: "relative" }} ref={exportMenuRef}>
+          <button className="btn btn-icon btn-ghost" onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} title="Export Options">
+            <Download size={12} />
+          </button>
+
+          {isExportMenuOpen && (
+            <div
+              style={{
+                position: "absolute",
+                top: "100%",
+                right: 0,
+                marginTop: 6,
+                width: 150,
+                background: "var(--bg-1)",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                boxShadow: "var(--shadow)",
+                zIndex: 100,
+                padding: 4,
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+              }}
+            >
+              {onExportCsv && (
+                <button
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 8px",
+                    borderRadius: 4,
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    color: "var(--fg)",
+                    fontFamily: "var(--font-ui)",
+                    fontSize: 11,
+                    width: "100%"
+                  }}
+                  onClick={() => {
+                    onExportCsv();
+                    setIsExportMenuOpen(false);
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--bg-2)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <FileSpreadsheet size={11} style={{ opacity: 0.8 }} />
+                  <span>Export as CSV</span>
+                </button>
+              )}
+              {onExportJson && (
+                <button
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 8px",
+                    borderRadius: 4,
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    color: "var(--fg)",
+                    fontFamily: "var(--font-ui)",
+                    fontSize: 11,
+                    width: "100%"
+                  }}
+                  onClick={() => {
+                    onExportJson();
+                    setIsExportMenuOpen(false);
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--bg-2)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <FileCode size={11} style={{ opacity: 0.8 }} />
+                  <span>Export as JSON</span>
+                </button>
+              )}
+              {onExport && (
+                <button
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 8px",
+                    borderRadius: 4,
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    color: "var(--fg)",
+                    fontFamily: "var(--font-ui)",
+                    fontSize: 11,
+                    width: "100%"
+                  }}
+                  onClick={() => {
+                    onExport();
+                    setIsExportMenuOpen(false);
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--bg-2)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <Download size={11} style={{ opacity: 0.8 }} />
+                  <span>Export as .ds</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <button className="btn btn-icon btn-ghost" onClick={onToggleTheme}>
         {theme === "dark" ? <Sun size={12} /> : <Moon size={12} />}

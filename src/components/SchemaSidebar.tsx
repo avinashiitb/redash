@@ -13,6 +13,7 @@ import {
   Check,
 } from "lucide-react";
 import { ipc } from "../ipc";
+import { isDbMatch } from "../utils/docUtils";
 
 // Reusable inline copy button shown on row hover
 const CopyBtn: React.FC<{ text: string }> = ({ text }) => {
@@ -90,6 +91,7 @@ const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
   const [dbsExpanded, setDbsExpanded] = useState<boolean>(true);
 
   const [databases, setDatabases] = useState<string[]>([]);
+  const [dbSearch, setDbSearch] = useState("");
   const [loadingDatabases, setLoadingDatabases] = useState(false);
 
   const safeConnections = Array.isArray(connections) ? connections : [];
@@ -117,15 +119,15 @@ const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
         setDatabases(dbs);
         // Priority: 1) already-selected DB (from saved state), 2) pinned DB in connection, 3) first in list
         const pinned = selectedConnection?.database;
-        const alreadyValid = selectedDatabase && dbs.includes(selectedDatabase);
+        const alreadyValid = selectedDatabase && dbs.some(d => isDbMatch(d, selectedDatabase));
         const defaultDb = alreadyValid
           ? selectedDatabase
-          : (pinned && dbs.some(d => d === pinned || d.endsWith(`||${pinned}`))
-              ? dbs.find(d => d === pinned || d.endsWith(`||${pinned}`))
+          : (pinned && dbs.some(d => isDbMatch(d, pinned))
+              ? dbs.find(d => isDbMatch(d, pinned))
               : dbs[0]);
-        if (onSelectDatabase) onSelectDatabase(defaultDb);
+        if (onSelectDatabase) onSelectDatabase(defaultDb || null);
         // Force load the schema for the selected default DB
-        loadSchema(defaultDb);
+        loadSchema(defaultDb || null);
       } else {
         setDatabases([]);
         if (onSelectDatabase) onSelectDatabase(null);
@@ -272,45 +274,72 @@ const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
 
             {/* Database rows */}
             {dbsExpanded && (
-              <div style={{ marginTop: 2, maxHeight: '140px', overflowY: 'auto' }}>
+              <div style={{ marginTop: 2, maxHeight: '180px', overflowY: 'auto' }}>
+                {databases.length > 0 && (
+                  <div style={{ padding: '2px 8px 4px 20px' }}>
+                    <input
+                      type="text"
+                      placeholder="Search databases..."
+                      value={dbSearch}
+                      onChange={(e) => setDbSearch(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '3px 6px',
+                        fontSize: '11px',
+                        borderRadius: '4px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-2)',
+                        color: 'var(--fg)',
+                        outline: 'none',
+                        fontFamily: 'inherit',
+                      }}
+                    />
+                  </div>
+                )}
                 {loadingDatabases ? (
                   <div style={{ padding: '4px 20px', fontSize: 11, color: 'var(--fg-3)' }}>Loading…</div>
                 ) : databases.length === 0 ? (
                   <div style={{ padding: '4px 20px', fontSize: 11, color: 'var(--fg-3)' }}>No databases found</div>
                 ) : (
-                  databases.map((db) => {
-                    const isActive = db === selectedDatabase;
-                    return (
-                      <div
-                        key={db}
-                        onClick={() => onSelectDatabase && onSelectDatabase(db)}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 7,
-                          padding: '4px 8px 4px 20px',
-                          borderRadius: 4, cursor: 'pointer', fontSize: 11.5,
-                          background: isActive ? 'rgba(16,185,129,0.08)' : 'transparent',
-                          color: isActive ? '#10b981' : 'var(--fg-1)',
-                          fontWeight: isActive ? 600 : 400,
-                          transition: 'background 0.1s',
-                        }}
-                        onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-2)'; }}
-                        onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-                      >
-                        {/* Cylinder / db icon */}
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                          <ellipse cx="12" cy="6" rx="8" ry="2.5"/>
-                          <path d="M4 6v12c0 1.38 3.58 2.5 8 2.5s8-1.12 8-2.5V6"/>
-                          <path d="M4 12c0 1.38 3.58 2.5 8 2.5s8-1.12 8-2.5"/>
-                        </svg>
-                        <span className="mono" style={{ flex: 1, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{db.includes('||') ? db.split('||')[0] : db}</span>
-                        {isActive && (
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                            <polyline points="20 6 9 17 4 12"/>
+                  (() => {
+                    const filteredDbs = databases.filter((db) => db.toLowerCase().includes(dbSearch.toLowerCase()));
+                    if (filteredDbs.length === 0) {
+                      return <div style={{ padding: '4px 20px', fontSize: 11, color: 'var(--fg-3)' }}>No matching databases</div>;
+                    }
+                    return filteredDbs.map((db) => {
+                      const isActive = db === selectedDatabase || isDbMatch(db, selectedDatabase);
+                      return (
+                        <div
+                          key={db}
+                          onClick={() => onSelectDatabase && onSelectDatabase(db)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 7,
+                            padding: '4px 8px 4px 20px',
+                            borderRadius: 4, cursor: 'pointer', fontSize: 11.5,
+                            background: isActive ? 'rgba(16,185,129,0.08)' : 'transparent',
+                            color: isActive ? '#10b981' : 'var(--fg-1)',
+                            fontWeight: isActive ? 600 : 400,
+                            transition: 'background 0.1s',
+                          }}
+                          onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-2)'; }}
+                          onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                        >
+                          {/* Cylinder / db icon */}
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                            <ellipse cx="12" cy="6" rx="8" ry="2.5"/>
+                            <path d="M4 6v12c0 1.38 3.58 2.5 8 2.5s8-1.12 8-2.5V6"/>
+                            <path d="M4 12c0 1.38 3.58 2.5 8 2.5s8-1.12 8-2.5"/>
                           </svg>
-                        )}
-                      </div>
-                    );
-                  })
+                          <span className="mono" style={{ flex: 1, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{db.includes('||') ? db.split('||')[0] : db}</span>
+                          {isActive && (
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                              <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()
                 )}
               </div>
             )}

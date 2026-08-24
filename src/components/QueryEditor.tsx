@@ -9,6 +9,7 @@ interface QueryEditorProps {
   schemaTables?: any[];
   selectedConnectionId?: number | null;
   selectedDatabase?: string | null;
+  onExecute?: () => void;
 }
 
 // SQL keywords for base completions
@@ -30,6 +31,7 @@ const QueryEditor: React.FC<QueryEditorProps> = ({
   onChange,
   selectedConnectionId,
   selectedDatabase,
+  onExecute,
 }) => {
   const isDark = document.documentElement.getAttribute("data-theme") === "dark";
   const monacoRef = useRef<any>(null);
@@ -219,6 +221,12 @@ const QueryEditor: React.FC<QueryEditorProps> = ({
     });
 
     monaco.editor.setTheme(isDark ? "db-dark" : "db-light");
+
+    if (onExecute) {
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+        onExecute();
+      });
+    }
 
     registerCompletions(monaco);
   };

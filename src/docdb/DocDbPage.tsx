@@ -5,6 +5,8 @@ import DocDbEditor from "./DocDbEditor";
 import ResultSection from "../components/ResultSection";
 import DocDbConnectionsView from "./DocDbConnectionsView";
 import { ipc } from "../ipc";
+import { exportToCsv, exportToJson } from "../utils/exportUtils";
+import { extractSavedData } from "../utils/docUtils";
 import "./DocDbPage.css";
 
 interface DocDbPageProps {
@@ -127,25 +129,25 @@ const DocDbPage: React.FC<DocDbPageProps> = ({
             if (data && data.length > 0) {
               const document = data[0];
               setContentDoc(document);
-              let parsed = document?.blocks?.[0]?.data;
-              if (typeof parsed === "string") {
-                try {
-                  parsed = JSON.parse(parsed);
-                } catch (e) {}
-              }
-              savedData = parsed;
+              savedData = extractSavedData(document);
             }
           } else {
-            savedData = await ipc.invoke("load-data");
+            const raw = await ipc.invoke("load-data");
+            savedData = extractSavedData({ blocks: [{ data: raw }] });
           }
         } else {
-          savedData = await ipc.invoke("load-data");
+          const raw = await ipc.invoke("load-data");
+          savedData = extractSavedData({ blocks: [{ data: raw }] });
         }
 
-        if (savedData && Object.keys(savedData).length > 0) {
-          if (savedData.query) setQuery(savedData.query);
-          if (savedData.results) setResults(savedData.results);
-          if (savedData.executionTime) setExecutionTime(savedData.executionTime);
+        if (savedData && (savedData.query !== undefined || savedData.results !== undefined || savedData.result !== undefined)) {
+          if (savedData.query !== undefined) setQuery(savedData.query);
+          if (savedData.results !== undefined) {
+            setResults(Array.isArray(savedData.results) ? savedData.results : [savedData.results]);
+          } else if (savedData.result !== undefined) {
+            setResults(Array.isArray(savedData.result) ? savedData.result : [savedData.result]);
+          }
+          if (savedData.executionTime !== undefined) setExecutionTime(savedData.executionTime);
         } else {
           const isElastic = selectedDatabase?.toLowerCase().includes("elastic") || selectedDatabase?.toLowerCase().includes("opensearch");
           if (isElastic) {
@@ -175,10 +177,11 @@ const DocDbPage: React.FC<DocDbPageProps> = ({
       const payloadData = { query, results, executionTime, selectedConnectionId, selectedDatabase };
       const api = (window as any).pluginAPI;
       if (api && api.updateDocument && fileId) {
+        const blockType = contentDoc?.blocks?.[0]?.type || "redash";
         const updatedContents = {
           version: "1.0.0",
           time: Date.now(),
-          blocks: [{ type: "data-bridge", data: payloadData }],
+          blocks: [{ type: blockType, data: payloadData }],
           parent_file: fileId,
           _id: contentDoc?._id,
         };
@@ -285,6 +288,55 @@ const DocDbPage: React.FC<DocDbPageProps> = ({
     }
   };
 
+  const handleRunQueryRef = useRef(handleRunQuery);
+  useEffect(() => {
+    handleRunQueryRef.current = handleRunQuery;
+  }, [handleRunQuery]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        handleRunQueryRef.current();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const handleExport = () => {
+    const payloadData = { query, results, executionTime, error, selectedConnectionId, selectedDatabase, route: "docdb" };
+    const payload = {
+      ...contentDoc,
+      _id: contentDoc?._id || "",
+      version: contentDoc?.version || "1.0.0",
+      time: Date.now(),
+      parent_file: fileId || contentDoc?.parent_file || "",
+      blocks: [{ type: "redash", data: payloadData }],
+      createdAt: contentDoc?.createdAt || Date.now(),
+      updatedAt: Date.now(),
+      fileType: contentDoc?.fileType || "redash"
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const safeFileName = fileName ? fileName.replace(/\s+/g, '_').toLowerCase() : 'docdb_query';
+    link.download = `${safeFileName}_export.ds`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportCsv = () => {
+    exportToCsv(results, [], fileName || "docdb_query");
+  };
+
+  const handleExportJson = () => {
+    exportToJson(results, fileName || "docdb_query");
+  };
+
   const isElastic = selectedDatabase?.toLowerCase().includes("elastic") || selectedDatabase?.toLowerCase().includes("opensearch");
   const editorLanguage = isElastic ? "json" : "javascript";
 
@@ -302,6 +354,9 @@ const DocDbPage: React.FC<DocDbPageProps> = ({
         onExecute={handleRunQuery}
         fileName={fileName}
         breadcrumbs={breadcrumbs}
+        onExport={handleExport}
+        onExportCsv={handleExportCsv}
+        onExportJson={handleExportJson}
       />
 
       <div className="docdb-main-layout">
@@ -330,7 +385,7 @@ const DocDbPage: React.FC<DocDbPageProps> = ({
                   background: "var(--bg-1)",
                 }}
               >
-                <DocDbEditor value={query} onChange={setQuery} collections={collections} language={editorLanguage} />
+                <DocDbEditor value={query} onChange={setQuery} collections={collections} language={editorLanguage} onExecute={handleRunQuery} />
               </div>
 
               {/* Horizontal divider row resize */}
@@ -348,10 +403,14 @@ const DocDbPage: React.FC<DocDbPageProps> = ({
                 onMouseLeave={(e) => (e.currentTarget.style.background = "var(--border)")}
               />
 
-              <ResultSection
-                result={results.length > 0 || error ? { data: results, error, executionTime } : null}
-                isExecuting={isExecuting}
-              />
+              <div className="col" style={{ flex: 1, minHeight: 0, height: 'calc(100% - ' + editorHeight + '%)', display: 'flex', flexDirection: 'column' }}>
+                <ResultSection
+                  result={results.length > 0 || error ? { data: results, error, executionTime } : null}
+                  isExecuting={isExecuting}
+                  fileName={fileName}
+                  theme={theme as 'light' | 'dark'}
+                />
+              </div>
             </main>
 
             {/* Vertical divider panel resize */}

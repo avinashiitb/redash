@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Search, RefreshCw, Sparkles } from "lucide-react";
 import { ipc } from "../ipc";
+import { isDbMatch } from "../utils/docUtils";
 
 interface DocDbSidebarProps {
   collections: any[];
@@ -72,6 +73,7 @@ const DocDbSidebar: React.FC<DocDbSidebarProps> = ({
 }) => {
   const [filter, setFilter] = useState("");
   const [databases, setDatabases] = useState<string[]>([]);
+  const [dbSearch, setDbSearch] = useState("");
   const [loadingDatabases, setLoadingDatabases] = useState(false);
 
   const [expandedCols, setExpandedCols] = useState<Record<string, boolean>>({
@@ -104,8 +106,11 @@ const DocDbSidebar: React.FC<DocDbSidebarProps> = ({
           // Auto-select: pick the first DB if nothing is selected yet
           if (onSelectDatabase) {
             const pinned = connection?.database;
-            const best = (pinned && dbs.includes(pinned)) ? pinned : dbs[0];
-            onSelectDatabase(best);
+            const alreadyValid = database && dbs.some(d => isDbMatch(d, database));
+            const best = alreadyValid
+              ? database
+              : ((pinned && dbs.some(d => isDbMatch(d, pinned))) ? dbs.find(d => isDbMatch(d, pinned)) : dbs[0]);
+            onSelectDatabase(best || null);
           }
         } else {
           setDatabases([]);
@@ -491,47 +496,74 @@ const DocDbSidebar: React.FC<DocDbSidebarProps> = ({
         </div>
 
         {dbsExpanded && (
-          <div style={{ marginTop: 2, marginBottom: 4, maxHeight: '140px', overflowY: 'auto' }}>
+          <div style={{ marginTop: 2, marginBottom: 4, maxHeight: '180px', overflowY: 'auto' }}>
+            {databases.length > 0 && (
+              <div style={{ padding: "2px 8px 4px 20px" }}>
+                <input
+                  type="text"
+                  placeholder="Search databases..."
+                  value={dbSearch}
+                  onChange={(e) => setDbSearch(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "3px 6px",
+                    fontSize: "11px",
+                    borderRadius: "4px",
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-2)",
+                    color: "var(--fg)",
+                    outline: "none",
+                    fontFamily: "inherit",
+                  }}
+                />
+              </div>
+            )}
             {loadingDatabases ? (
               <div style={{ padding: "6px 20px", fontSize: 11, color: "var(--fg-3)" }}>Loading databases...</div>
             ) : databases.length === 0 ? (
               <div style={{ padding: "6px 20px", fontSize: 11, color: "var(--fg-3)" }}>No databases found</div>
             ) : (
-              databases.map((db) => {
-                const isActive = db === database;
-                return (
-                  <div
-                    key={db}
-                    className={`tree-row indent-1 ${isActive ? "active" : ""}`}
-                    onClick={() => onSelectDatabase && onSelectDatabase(db)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      padding: "4px 8px",
-                      borderRadius: 4,
-                      cursor: "pointer",
-                      fontSize: 11.5,
-                      background: isActive ? "rgba(16, 185, 129, 0.08)" : "transparent",
-                      color: isActive ? "#10b981" : "var(--fg-1)",
-                      fontWeight: isActive ? 600 : 400,
-                    }}
-                  >
-                    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 10, marginRight: 6 }}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                        <ellipse cx="12" cy="6" rx="8" ry="2.5"></ellipse>
-                        <path d="M4 6v12c0 1.38 3.58 2.5 8 2.5s8-1.12 8-2.5V6"></path>
-                        <path d="M4 12c0 1.38 3.58 2.5 8 2.5s8-1.12 8-2.5"></path>
-                      </svg>
-                    </span>
-                    <span className="mono" style={{ fontSize: "11px", flex: 1, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{db.includes('||') ? db.split('||')[0] : db}</span>
-                    {isActive && (
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "#10b981", flexShrink: 0 }}>
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                      </svg>
-                    )}
-                  </div>
-                );
-              })
+              (() => {
+                const filteredDbs = databases.filter((db) => db.toLowerCase().includes(dbSearch.toLowerCase()));
+                if (filteredDbs.length === 0) {
+                  return <div style={{ padding: "6px 20px", fontSize: 11, color: "var(--fg-3)" }}>No matching databases</div>;
+                }
+                return filteredDbs.map((db) => {
+                  const isActive = db === database || isDbMatch(db, database);
+                  return (
+                    <div
+                      key={db}
+                      className={`tree-row indent-1 ${isActive ? "active" : ""}`}
+                      onClick={() => onSelectDatabase && onSelectDatabase(db)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        padding: "4px 8px",
+                        borderRadius: 4,
+                        cursor: "pointer",
+                        fontSize: 11.5,
+                        background: isActive ? "rgba(16, 185, 129, 0.08)" : "transparent",
+                        color: isActive ? "#10b981" : "var(--fg-1)",
+                        fontWeight: isActive ? 600 : 400,
+                      }}
+                    >
+                      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 10, marginRight: 6 }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                          <ellipse cx="12" cy="6" rx="8" ry="2.5"></ellipse>
+                          <path d="M4 6v12c0 1.38 3.58 2.5 8 2.5s8-1.12 8-2.5V6"></path>
+                          <path d="M4 12c0 1.38 3.58 2.5 8 2.5s8-1.12 8-2.5"></path>
+                        </svg>
+                      </span>
+                      <span className="mono" style={{ fontSize: "11px", flex: 1, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{db.includes('||') ? db.split('||')[0] : db}</span>
+                      {isActive && (
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "#10b981", flexShrink: 0 }}>
+                          <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                      )}
+                    </div>
+                  );
+                });
+              })()
             )}
           </div>
         )}

@@ -1,6 +1,9 @@
 // Redash Backend Module for DevScribe Dynamic Execution
 
 async function testConnection(config) {
+    if (!config || !config.host) {
+        return { success: false, message: "No connection configuration selected" };
+    }
     try {
         const response = await fetch(`${config.host}/api/session`, {
             method: 'GET',
@@ -17,6 +20,9 @@ async function testConnection(config) {
 }
 
 async function getDatabases(config) {
+    if (!config || !config.host) {
+        return (config && config.database) ? [config.database] : [];
+    }
     try {
         const response = await fetch(`${config.host}/api/data_sources`, {
             headers: { 'Authorization': `Key ${config.password}` }
@@ -30,6 +36,9 @@ async function getDatabases(config) {
 }
 
 async function getTables(config, database) {
+    if (!config || !config.host) {
+        return [];
+    }
     const activeDb = database || config.database;
     let dataSourceId = activeDb;
     if (dataSourceId && typeof dataSourceId === 'string') {
@@ -102,6 +111,9 @@ async function getTables(config, database) {
 }
 
 async function executeQuery(config, query, database) {
+    if (!config || !config.host) {
+        throw new Error("Please select a valid connection first");
+    }
     const activeDb = database || config.database;
     const startTime = performance.now();
     
