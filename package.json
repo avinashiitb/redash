@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "package": "mkdir -p release && zip -r release/redash-$npm_package_version.zip manifest.json build/ backend/"
+    "package": "mkdir -p release && zip -r release/redash-$npm_package_version.zip manifest.json build/ backend/",
+    "test": "vitest run"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -27,6 +28,7 @@
     "globals": "^17.5.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "vitest": "^5.0.0"
   }
 }
