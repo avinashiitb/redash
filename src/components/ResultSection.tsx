@@ -12,10 +12,12 @@ import {
   ChevronsRight,
   FileSpreadsheet,
   FileCode,
+  AlertTriangle,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import "./ResultSection.css";
 import { exportToCsv, exportToJson } from "../utils/exportUtils";
+import { detectOutliers } from "../utils/anomalyDetection";
 
 interface ResultSectionProps {
   result: any;
@@ -39,6 +41,7 @@ const ResultSection: React.FC<ResultSectionProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [filterText, setFilterText] = useState("");
+  const [showAnomalies, setShowAnomalies] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
@@ -88,6 +91,46 @@ const ResultSection: React.FC<ResultSectionProps> = ({
     }
   }
   const executionTime = result?.executionTime || result?.duration || 0;
+
+  const columnOutliers = React.useMemo(() => {
+    if (!showAnomalies || !data || data.length < 4 || columns.length === 0) {
+      return {};
+    }
+    const outliersMap: Record<string, Record<number, boolean>> = {};
+
+    columns.forEach((c: any) => {
+      const key = typeof c === "object" ? (c.key || c.name || String(c)) : c;
+
+      const values = data.map((row: any) => {
+        const val = typeof row === "object" && row !== null ? row[key] : (key === "value" ? row : undefined);
+        return typeof val === "number" ? val : null;
+      });
+
+      const numericCount = values.filter((v) => v !== null && !Number.isNaN(v)).length;
+      if (numericCount >= 4) {
+        const flags = detectOutliers(values);
+        const rowFlags: Record<number, boolean> = {};
+        flags.forEach((isOutlier, idx) => {
+          if (isOutlier) {
+            rowFlags[idx] = true;
+          }
+        });
+        if (Object.keys(rowFlags).length > 0) {
+          outliersMap[key] = rowFlags;
+        }
+      }
+    });
+
+    return outliersMap;
+  }, [showAnomalies, data, columns]);
+
+  const totalAnomaliesCount = React.useMemo(() => {
+    let count = 0;
+    Object.values(columnOutliers).forEach((rowFlags) => {
+      count += Object.keys(rowFlags).length;
+    });
+    return count;
+  }, [columnOutliers]);
 
   const filteredData = React.useMemo(() => {
     if (!filterText.trim()) return data;
@@ -206,6 +249,45 @@ const ResultSection: React.FC<ResultSectionProps> = ({
             }}
           />
         </div>
+
+        <button
+          className="btn btn-ghost"
+          onClick={() => setShowAnomalies(!showAnomalies)}
+          title="Highlight numerical anomalies using IQR method"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            padding: "2px 8px",
+            height: 24,
+            fontSize: 11,
+            borderRadius: 6,
+            fontWeight: 500,
+            cursor: "pointer",
+            background: showAnomalies ? "rgba(239, 68, 68, 0.15)" : "var(--bg-2)",
+            color: showAnomalies ? "#ef4444" : "var(--fg-2)",
+            border: showAnomalies ? "1px solid rgba(239, 68, 68, 0.4)" : "1px solid var(--border)",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <AlertTriangle size={11} style={{ color: showAnomalies ? "#ef4444" : "var(--fg-3)" }} />
+          <span>Anomalies</span>
+          {showAnomalies && (
+            <span
+              style={{
+                background: "#ef4444",
+                color: "#ffffff",
+                borderRadius: 99,
+                padding: "0 5px",
+                fontSize: 9,
+                fontWeight: 700,
+                lineHeight: "13px",
+              }}
+            >
+              {totalAnomaliesCount}
+            </span>
+          )}
+        </button>
 
         <div style={{ position: "relative" }} ref={exportMenuRef}>
           <button
@@ -405,18 +487,46 @@ const ResultSection: React.FC<ResultSectionProps> = ({
                         );
                       }
 
+                      const dataIndex = (currentPage - 1) * pageSize + i;
+                      const isOutlierCell = showAnomalies && columnOutliers[key]?.[dataIndex];
+
                       return (
                         <td
                           key={j}
                           className={isNum ? "num" : "str"}
+                          title={isOutlierCell ? "⚠️ Anomaly / Outlier detected (IQR Method)" : undefined}
                           style={{
                             maxWidth: 300,
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
+                            background: isOutlierCell ? "rgba(239, 68, 68, 0.12)" : undefined,
+                            color: isOutlierCell ? "#ef4444" : undefined,
+                            fontWeight: isOutlierCell ? 600 : undefined,
                           }}
                         >
-                          {displayVal}
+                          {isOutlierCell ? (
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                              <span>{displayVal}</span>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 2,
+                                  background: "rgba(239, 68, 68, 0.2)",
+                                  color: "#ef4444",
+                                  padding: "1px 4px",
+                                  borderRadius: 4,
+                                  fontSize: 9,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                <AlertTriangle size={9} /> Outlier
+                              </span>
+                            </div>
+                          ) : (
+                            displayVal
+                          )}
                         </td>
                       );
                     })}
