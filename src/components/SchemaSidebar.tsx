@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Database,
-  Search,
   ChevronRight,
   ChevronDown,
   RefreshCw,
@@ -11,6 +10,7 @@ import {
   Zap,
   Copy,
   Check,
+  PanelRightClose,
 } from "lucide-react";
 import { ipc } from "../ipc";
 import { isDbMatch } from "../utils/docUtils";
@@ -70,19 +70,39 @@ const CopyBtn: React.FC<{ text: string }> = ({ text }) => {
 interface SchemaSidebarProps {
   connections: any[];
   selectedConnectionId: number | null;
+  onSelectConnection?: (id: number | null) => void;
   selectedDatabase?: string | null;
   onSelectDatabase?: (db: string | null) => void;
+  onToggleSidebar?: () => void;
 }
 
 const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
   connections,
   selectedConnectionId,
+  onSelectConnection,
   selectedDatabase,
   onSelectDatabase,
+  onToggleSidebar,
 }) => {
+  const [isConnDropdownOpen, setIsConnDropdownOpen] = useState(false);
+  const connDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        connDropdownRef.current &&
+        !connDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsConnDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const [tables, setTables] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
+  const [tableSearch, setTableSearch] = useState("");
   const [expandedTables, setExpandedTables] = useState<boolean>(true);
   const [expandedViews, setExpandedViews] = useState<boolean>(false);
   const [expandedProcs, setExpandedProcs] = useState<boolean>(false);
@@ -107,6 +127,8 @@ const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
       if (onSelectDatabase) onSelectDatabase(null);
       setTables([]);
     }
+    setDbSearch("");
+    setTableSearch("");
   }, [selectedConnectionId]);
 
   const loadDatabases = async () => {
@@ -149,6 +171,7 @@ const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
         loadSchema(selectedDatabase);
       }
     }
+    setTableSearch("");
   }, [selectedDatabase]);
 
   const loadSchema = async (dbName: string | null = selectedDatabase || null) => {
@@ -171,13 +194,23 @@ const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
     }
   };
 
-  const filteredSchema = tables.filter((t) =>
-    t.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const allTables = tables.filter((t) => t.type === 'table' || !t.type);
+  const dbViews = tables.filter((t) => t.type === 'view');
+  const dbProcs = tables.filter((t) => t.type === 'procedure' || t.type === 'function');
 
-  const dbTables = filteredSchema.filter(t => t.type === 'table' || !t.type);
-  const dbViews = filteredSchema.filter(t => t.type === 'view');
-  const dbProcs = filteredSchema.filter(t => t.type === 'procedure' || t.type === 'function');
+  const filteredTables = allTables.filter((table) => {
+    const q = tableSearch.toLowerCase();
+    if (!q) return true;
+    if (table.name.toLowerCase().includes(q)) return true;
+    if (
+      table.columns &&
+      Array.isArray(table.columns) &&
+      table.columns.some((col: any) => col.name.toLowerCase().includes(q))
+    ) {
+      return true;
+    }
+    return false;
+  });
 
   return (
     <aside
@@ -198,58 +231,216 @@ const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
             background: "var(--bg-1)",
           }}
         >
-          <div className="row gap-2">
-            <span
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 6,
-                background: "rgba(228, 142, 0, 0.14)",
-                color: "rgb(228, 142, 0)",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontFamily: '"JetBrains Mono", monospace',
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: "-0.02em",
-              }}
-            >
-              My
-            </span>
-            <div style={{ minWidth: 0, flex: "1 1 0%" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ flex: 1, position: "relative", minWidth: 0 }} ref={connDropdownRef}>
               <div
                 style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "var(--fg)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "5px 8px",
+                  borderRadius: 6,
+                  border: "1px solid var(--border)",
+                  background: isConnDropdownOpen ? "var(--bg-3)" : "var(--bg-2)",
+                  cursor: safeConnections.length > 0 ? "pointer" : "default",
+                  userSelect: "none",
+                  transition: "all 0.15s ease",
                 }}
-              >
-                {selectedConnection.name}
-              </div>
-              <div
-                className="muted mono"
-                style={{
-                  fontSize: 10,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                onClick={() => {
+                  if (safeConnections.length > 0) {
+                    setIsConnDropdownOpen((v) => !v);
+                  }
                 }}
+                title={safeConnections.length > 0 ? "Click to switch connection" : "Connection details"}
               >
-                {selectedConnection.type || selectedConnection.kind || "mysql"}{selectedDatabase ? ` · ${selectedDatabase.includes('||') ? selectedDatabase.split('||')[0] : selectedDatabase}` : ""} · {tables.length} tables/views
+                <span
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 4,
+                    background: "var(--accent-soft)",
+                    color: "var(--accent)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontFamily: '"JetBrains Mono", monospace',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  {selectedConnection?.type ? selectedConnection.type.slice(0, 2).toUpperCase() : "DB"}
+                </span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "var(--fg)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {selectedConnection ? selectedConnection.name : "Select connection"}
+                    </span>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        backgroundColor: "#10b981",
+                        boxShadow: "0 0 5px #10b981",
+                        flexShrink: 0,
+                      }}
+                    />
+                  </div>
+                  <div
+                    className="muted mono"
+                    style={{
+                      fontSize: 9.5,
+                      color: "var(--fg-3)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {selectedConnection
+                      ? `${selectedConnection.type || selectedConnection.kind || "mysql"}${selectedConnection.host ? ` · ${selectedConnection.host.split("@").pop()}` : ""}`
+                      : "No active connection"}
+                  </div>
+                </div>
+                <ChevronDown
+                  size={12}
+                  style={{
+                    color: "var(--fg-3)",
+                    flexShrink: 0,
+                    transform: isConnDropdownOpen ? "rotate(180deg)" : "none",
+                    transition: "transform 0.15s ease",
+                  }}
+                />
               </div>
+
+              {/* Dropdown Menu */}
+              {isConnDropdownOpen && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 4px)",
+                    left: 0,
+                    right: 0,
+                    background: "var(--bg-1)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                    boxShadow: "var(--shadow, 0 8px 24px rgba(0,0,0,0.25))",
+                    zIndex: 1000,
+                    padding: 4,
+                    maxHeight: 220,
+                    overflowY: "auto",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 2,
+                  }}
+                >
+                  {safeConnections.map((c) => {
+                    const isSelected = c.id === selectedConnection?.id;
+                    const cHost = c.host ? c.host.split("@").pop() : "localhost";
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onSelectConnection) onSelectConnection(c.id);
+                          setIsConnDropdownOpen(false);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "6px 8px",
+                          borderRadius: 4,
+                          border: isSelected ? "1px solid rgba(16, 185, 129, 0.4)" : "1px solid transparent",
+                          background: isSelected ? "rgba(16, 185, 129, 0.1)" : "transparent",
+                          color: isSelected ? "#10b981" : "var(--fg)",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          fontFamily: "var(--font-ui)",
+                          width: "100%",
+                          transition: "background 0.12s",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) e.currentTarget.style.background = "var(--bg-2)";
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) e.currentTarget.style.background = "transparent";
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: "50%",
+                            backgroundColor: isSelected ? "#10b981" : "var(--fg-3)",
+                            opacity: isSelected ? 1 : 0.4,
+                            flexShrink: 0,
+                          }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: isSelected ? 600 : 500,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {c.name}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 9.5,
+                              color: "var(--fg-3)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                            className="mono"
+                          >
+                            {c.type || "sql"} · {cHost}
+                          </div>
+                        </div>
+                        {isSelected && <Check size={12} style={{ color: "#10b981", flexShrink: 0 }} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+
             <button
               className={`btn btn-icon btn-ghost ${loading ? 'spin' : ''}`}
               title="Refresh"
-              style={{ height: 22, width: 22 }}
+              style={{ height: 26, width: 26, flexShrink: 0 }}
               onClick={() => loadSchema()}
             >
               <RefreshCw size={11} className={loading ? "spin" : ""} />
             </button>
+            {onToggleSidebar && (
+              <button
+                className="btn btn-icon btn-ghost"
+                title="Hide Database Sidebar"
+                style={{ height: 26, width: 26, flexShrink: 0 }}
+                onClick={onToggleSidebar}
+              >
+                <PanelRightClose size={12} />
+              </button>
+            )}
           </div>
           
           {/* ── Databases tree — replaces dropdown ── */}
@@ -362,38 +553,6 @@ const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
       )}
 
       <div
-        style={{ padding: "6px 12px", borderBottom: "1px solid var(--border)" }}
-      >
-        <div
-          className="row gap-2"
-          style={{
-            background: "var(--bg-2)",
-            border: "1px solid var(--border)",
-            borderRadius: 6,
-            padding: "4px 8px",
-            height: 26,
-          }}
-        >
-          <Search size={12} style={{ color: "var(--fg-3)" }} />
-          <input
-            placeholder="Filter tables, columns…"
-            style={{
-              border: "none",
-              background: "transparent",
-              outline: "none",
-              color: "var(--fg)",
-              fontSize: 12,
-              flex: "1 1 0%",
-              fontFamily: "inherit",
-            }}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <span className="kbd">⌘K</span>
-        </div>
-      </div>
-
-      <div
         className="tree"
         style={{ flex: 1, overflowY: "auto", width: "100%" }}
       >
@@ -428,86 +587,121 @@ const SchemaSidebar: React.FC<SchemaSidebarProps> = ({
                 style={{ color: "var(--fg-2)", marginRight: 6 }}
               />
               <span style={{ fontWeight: 600 }}>Tables</span>
-              <span className="tree-count">{dbTables.length}</span>
+              <span className="tree-count">{allTables.length}</span>
             </div>
 
-            {expandedTables &&
-              dbTables.map((table, idx) => {
-                const isOpen = openTable === table.name;
-                const rowKey = `t-${table.name}`;
-                return (
-                  <React.Fragment key={idx}>
-                    <div
-                      className={`tree-row indent-1 ${isOpen ? "active" : ""}`}
-                      onClick={() => setOpenTable(isOpen ? null : table.name)}
-                      onMouseEnter={() => setHoveredRow(rowKey)}
-                      onMouseLeave={() => setHoveredRow(null)}
-                      style={{ position: 'relative' }}
-                    >
-                      <span className="tree-chev">
-                        {isOpen ? (
-                          <ChevronDown size={10} />
-                        ) : (
-                          <ChevronRight size={10} />
-                        )}
-                      </span>
-                      <Table2
-                        size={11}
-                        style={{ color: "var(--fg-3)", marginRight: 6 }}
-                      />
-                      <span className="mono" style={{ fontSize: 11.5 }}>
-                        {table.name}
-                      </span>
-                      {hoveredRow === rowKey ? (
-                        <CopyBtn text={table.name} />
-                      ) : (
-                        <span className="tree-count">
-                          {table.columns?.length || 0}
-                        </span>
-                      )}
-                    </div>
-
-                    {isOpen &&
-                      table.columns?.map((col: any, cIdx: number) => {
-                        const colKey = `col-${table.name}-${col.name}`;
-                        return (
-                          <div
-                            key={cIdx}
-                            className="tree-row indent-2"
-                            onMouseEnter={() => setHoveredRow(colKey)}
-                            onMouseLeave={() => setHoveredRow(null)}
-                          >
-                            <span className="tree-chev"></span>
-                            {col.isPrimary ? (
-                              <Key
-                                size={10}
-                                style={{ color: "var(--warn)", marginRight: 6 }}
-                              />
+            {expandedTables && (
+              <React.Fragment>
+                {allTables.length > 0 && (
+                  <div style={{ padding: '2px 8px 4px 22px' }}>
+                    <input
+                      type="text"
+                      placeholder="Search tables..."
+                      value={tableSearch}
+                      onChange={(e) => setTableSearch(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        width: '100%',
+                        padding: '3px 6px',
+                        fontSize: '11px',
+                        borderRadius: '4px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-2)',
+                        color: 'var(--fg)',
+                        outline: 'none',
+                        fontFamily: 'inherit',
+                      }}
+                    />
+                  </div>
+                )}
+                {allTables.length === 0 ? (
+                  <div style={{ padding: '4px 20px', fontSize: 11, color: 'var(--fg-3)' }}>
+                    No tables found
+                  </div>
+                ) : filteredTables.length === 0 ? (
+                  <div style={{ padding: '4px 20px', fontSize: 11, color: 'var(--fg-3)' }}>
+                    No matching tables
+                  </div>
+                ) : (
+                  filteredTables.map((table, idx) => {
+                    const isOpen = openTable === table.name;
+                    const rowKey = `t-${table.name}`;
+                    return (
+                      <React.Fragment key={idx}>
+                        <div
+                          className={`tree-row indent-1 ${isOpen ? "active" : ""}`}
+                          onClick={() => setOpenTable(isOpen ? null : table.name)}
+                          onMouseEnter={() => setHoveredRow(rowKey)}
+                          onMouseLeave={() => setHoveredRow(null)}
+                          style={{ position: 'relative' }}
+                        >
+                          <span className="tree-chev">
+                            {isOpen ? (
+                              <ChevronDown size={10} />
                             ) : (
-                              <span style={{ width: 10, marginRight: 6 }}></span>
+                              <ChevronRight size={10} />
                             )}
-                            <span
-                              className="mono"
-                              style={{ fontSize: 11, color: "var(--fg-1)" }}
-                            >
-                              {col.name}
+                          </span>
+                          <Table2
+                            size={11}
+                            style={{ color: "var(--fg-3)", marginRight: 6 }}
+                          />
+                          <span className="mono" style={{ fontSize: 11.5 }}>
+                            {table.name}
+                          </span>
+                          {hoveredRow === rowKey ? (
+                            <CopyBtn text={table.name} />
+                          ) : (
+                            <span className="tree-count">
+                              {table.columns?.length || 0}
                             </span>
-                            {hoveredRow === colKey ? (
-                              <CopyBtn text={col.name} />
-                            ) : (
-                              <span
-                                className="tree-count"
-                                style={{ marginLeft: "auto", fontSize: 9.5 }}
+                          )}
+                        </div>
+
+                        {isOpen &&
+                          table.columns?.map((col: any, cIdx: number) => {
+                            const colKey = `col-${table.name}-${col.name}`;
+                            return (
+                              <div
+                                key={cIdx}
+                                className="tree-row indent-2"
+                                onMouseEnter={() => setHoveredRow(colKey)}
+                                onMouseLeave={() => setHoveredRow(null)}
                               >
-                                {col.type}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                  </React.Fragment>
-                );
-              })}
+                                <span className="tree-chev"></span>
+                                {col.isPrimary ? (
+                                  <Key
+                                    size={10}
+                                    style={{ color: "var(--warn)", marginRight: 6 }}
+                                  />
+                                ) : (
+                                  <span style={{ width: 10, marginRight: 6 }}></span>
+                                )}
+                                <span
+                                  className="mono"
+                                  style={{ fontSize: 11, color: "var(--fg-1)" }}
+                                >
+                                  {col.name}
+                                </span>
+                                {hoveredRow === colKey ? (
+                                  <CopyBtn text={col.name} />
+                                ) : (
+                                  <span
+                                    className="tree-count"
+                                    style={{ marginLeft: "auto", fontSize: 9.5 }}
+                                  >
+                                    {col.type}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </React.Fragment>
+            )}
 
             <div
               className="tree-row"

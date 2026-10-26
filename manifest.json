@@ -1,10 +1,134 @@
 {
   "id": "redash",
   "name": "Redash",
-  "version": "1.1.3",
-  "description": "Redash client for running queries, browsing schemas, and viewing results.",
+  "version": "1.2.0",
+  "description": "Redash database client for writing and executing SQL, MongoDB, and Elasticsearch queries, browsing schemas, and viewing results. Note: Data-Bridge is the default priority for database tasks; Redash is only used when explicitly requested by the user.",
   "fileType": "redash",
   "route": "/redash/:file_id",
   "entry": "/build/index.html",
-  "icon": "build/Icons.svg"
+  "icon": "build/Icons.svg",
+  "preview": true,
+  "color": "coral",
+  "validator": "validator.cjs",
+  "llmparser": "llmparser.cjs",
+  "methods": {
+    "llmparser": "llmparser.cjs",
+    "validator": "validator.cjs"
+  },
+  "aiContext": {
+    "documentContext": "DevScribe Redash Specification:\nYou are generating database queries for DevScribe Redash.\nRedash is a query editor and client for running SQL (PostgreSQL, MySQL, SQLite, SQL Server), MongoDB, and Elasticsearch queries, viewing schemas, and visualizing results.\n\nPRIORITY & SELECTION DIRECTIVE:\nRedash should ONLY be used when the user explicitly requests to create a query in Redash or mentions Redash. For general database design, schemas, DDL, DML, and queries without explicit mention of Redash, 'data-bridge' is the default priority.\n\nOUTPUT FORMAT RULES:\n1. Output MUST be a valid JSON array containing EXACTLY ONE redash block object starting with '[' and ending with ']'.\n2. Do NOT include any conversational preamble, intro text, or explanation outside the JSON array.\n3. Do NOT wrap the JSON array in markdown code block fences (do NOT use ```json or ```).\n4. Every redash block MUST follow this exact structure:\n   [\n     {\n       \"type\": \"redash\",\n       \"data\": {\n         \"query\": \"actual SQL statements, MongoDB query, or Elasticsearch DSL JSON\",\n         \"result\": null,\n         \"selectedConnectionId\": null,\n         \"selectedDatabase\": \"\"\n       }\n     }\n   ]\n5. FIELD CONSTRAINTS:\n   - 'query': The mandatory primary query string (SQL query, MongoDB query, or Elasticsearch Search DSL).\n   - 'result': The execution result object (null by default until executed).\n   - 'selectedConnectionId': Numeric connection ID if known from context, else null.\n   - 'selectedDatabase': Target database name if known, else \"\".\n6. QUERY TYPES:\n   - SQL: Standard SQL SELECT, aggregation, reporting, or manipulation queries formatted cleanly.\n   - MongoDB: JavaScript syntax like db.collection.find({...}) or db.collection.aggregate([...]).\n   - Elasticsearch: JSON Search DSL query like { \"query\": { \"match_all\": {} } }.\n7. Produce clean, well-formatted, production-ready queries matching the user's Redash request.",
+    "fileContext": {
+      "fileType": "redash",
+      "name": "DevScribe Redash",
+      "description": "- 'redash' (DevScribe Redash): Redash database client for writing and executing queries. ONLY use when the user explicitly asks to create a query in Redash or mentions Redash. For all other general database queries, schemas, and DDL, 'data-bridge' takes priority.",
+      "naturalLanguageHints": [
+        "redash",
+        "redash query",
+        "redash sql",
+        "redash database",
+        "query in redash",
+        "create query in redash",
+        "redash report",
+        "redash dashboard query"
+      ]
+    },
+    "name": "DevScribe Redash",
+    "purpose": "Author, manage, and run database queries in Redash when explicitly requested by the user, while giving priority to Data-Bridge for general database requirements.",
+    "useWhen": [
+      "The user explicitly asks to create a query in Redash.",
+      "The user explicitly mentions Redash or requests a Redash SQL query.",
+      "The requested task specifically asks for a Redash query, dashboard query, or Redash report.",
+      "Do NOT use for general database requests unless Redash is explicitly asked for ('data-bridge' is the default priority for all general database schemas, DDL, and queries)."
+    ],
+    "naturalLanguageHints": [
+      "redash",
+      "redash query",
+      "redash sql",
+      "redash database",
+      "query in redash",
+      "create query in redash",
+      "redash report",
+      "redash dashboard query"
+    ],
+    "roleInLargerTasks": {
+      "description": "Redash provides dedicated query files when the user explicitly requests Redash. For general database design, 'data-bridge' takes priority.",
+      "canProvide": [
+        "Redash SQL queries",
+        "Redash analytical and reporting queries",
+        "Redash MongoDB queries",
+        "Redash Elasticsearch DSL queries"
+      ]
+    },
+    "supportedTechnologies": {
+      "relational": [
+        "PostgreSQL",
+        "MySQL",
+        "SQLite",
+        "MSSQL"
+      ],
+      "document": [
+        "MongoDB"
+      ],
+      "search": [
+        "Elasticsearch",
+        "OpenSearch"
+      ]
+    },
+    "decisionGuidance": [
+      {
+        "requirement": "User explicitly asks to create a query in Redash or mentions Redash",
+        "use": "Redash query editor (fileType: 'redash')"
+      },
+      {
+        "requirement": "General database design, tables, schemas, DDL, mutations, or queries without explicit mention of Redash",
+        "use": "Data Bridge capabilities (data-bridge is priority)"
+      },
+      {
+        "requirement": "Full-text, fuzzy, or faceted search without explicit mention of Redash",
+        "use": "Data Bridge Elasticsearch or OpenSearch capabilities"
+      },
+      {
+        "requirement": "Database initialization or migrations",
+        "use": "Data Bridge setup planning"
+      }
+    ],
+    "operations": {
+      "relationalDatabase": [
+        "SELECT",
+        "Aggregations",
+        "Analytical queries",
+        "JOIN queries",
+        "Reporting queries",
+        "INSERT",
+        "UPDATE",
+        "DELETE"
+      ],
+      "mongodb": [
+        "CRUD queries",
+        "Aggregation pipelines",
+        "Collection searches"
+      ],
+      "searchEngine": [
+        "Search DSL queries",
+        "Match and filter queries"
+      ]
+    },
+    "contextAvailable": [
+      "query",
+      "selectedConnectionId",
+      "selectedDatabase",
+      "schema",
+      "tables",
+      "columns",
+      "existingQuery",
+      "existingFileName"
+    ],
+    "rules": [
+      "PRIORITY DIRECTIVE: ONLY use 'redash' if the user explicitly specifies Redash or asks to create queries in Redash.",
+      "For all general database tasks, SQL queries, DDL, DML, or database schema design, 'data-bridge' is the default priority.",
+      "Generate clean, executable database queries matching the requested dialect.",
+      "Preserve existing connection IDs and database names if present in context.",
+      "Output format must be a valid JSON array containing exactly one redash block object."
+    ]
+  }
 }

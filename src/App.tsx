@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import DbQueryPage from './views/DbQueryPage';
 import DocDbPage from './docdb/DocDbPage';
+import DbQueryPreviewPage from './views/DbQueryPreviewPage';
+import DocDbPreviewPage from './docdb/DocDbPreviewPage';
 import { ipc } from './ipc';
 import { extractSavedData, isDbMatch } from './utils/docUtils';
 
@@ -18,6 +20,47 @@ function App({
   theme = "light",
   layout = "top-bottom",
 }: AppProps) {
+
+  const isPreview = useMemo(() => {
+    try {
+      const url = new URL(window.location.href);
+      let p = url.searchParams.get("preview");
+      if (!p && window.location.hash.includes("?")) {
+        const hashParams = new URLSearchParams(window.location.hash.split("?")[1]);
+        p = hashParams.get("preview");
+      }
+      return p === "true";
+    } catch (e) {
+      return false;
+    }
+  }, []);
+
+  const [previewData, setPreviewData] = useState<any>(null);
+
+  // Listen for initial load and messages in preview mode
+  useEffect(() => {
+    if (!isPreview) return;
+
+    const handleMessage = (e: MessageEvent) => {
+      if (!e.data) return;
+
+      if (e.data.type === 'LOAD_PREVIEW') {
+        const savedData = e.data.data;
+        setPreviewData(savedData);
+        if (savedData && typeof savedData === 'object') {
+          if (savedData.selectedConnectionId) setSelectedConnectionId(savedData.selectedConnectionId);
+          if (savedData.selectedDatabase) setSelectedDatabase(savedData.selectedDatabase);
+        }
+        setIsLoaded(true);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    // Notify parent frame that preview is ready
+    (window as any).parent?.postMessage({ type: 'PREVIEW_READY' }, '*');
+
+    return () => window.removeEventListener('message', handleMessage);
+  }, [isPreview]);
 
   const getFileId = () => {
     let id = (window as any).pluginAPI?.context?.fileId;
@@ -182,6 +225,28 @@ function App({
   };
 
   const isDocDb = isDocDbRoute || selectedConnection?.type === 'mongodb' || selectedConnection?.type === 'mongo' || getIsSelectedDatabaseDocDb();
+
+  if (isPreview) {
+    return (
+      <div className="plugin-container">
+        {isDocDb ? (
+          <DocDbPreviewPage
+            selectedConnectionId={selectedConnectionId}
+            selectedDatabase={selectedDatabase}
+            previewData={previewData}
+            theme={localTheme}
+          />
+        ) : (
+          <DbQueryPreviewPage
+            selectedConnectionId={selectedConnectionId}
+            selectedDatabase={selectedDatabase}
+            previewData={previewData}
+            theme={localTheme}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="plugin-container">

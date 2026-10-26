@@ -257,9 +257,6 @@ button {
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  transition:
-    width 200ms ease,
-    flex-basis 200ms ease;
   min-height: 0;
 }
 .right-panel.collapsed {
@@ -324,16 +321,90 @@ button {
 
 /* Splitter */
 .splitter-h {
+  height: 10px;
+  margin: -5px 0;
+  cursor: row-resize;
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+}
+.splitter-h-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
   height: 1px;
   background: var(--border);
-  cursor: row-resize;
-  flex: 0 0 1px;
+  transition: background 0.15s ease;
+}
+.splitter-handle-h {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  color: var(--fg-3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.15s ease;
+}
+.splitter-h:hover .splitter-h-line {
+  background: var(--accent, #3b82f6);
+}
+.splitter-h:hover .splitter-handle-h {
+  border-color: var(--accent, #3b82f6);
+  color: var(--accent, #3b82f6);
+  box-shadow: 0 1px 5px rgba(59, 130, 246, 0.25);
 }
 .splitter-v {
+  width: 10px;
+  margin: 0 -5px;
+  cursor: col-resize;
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+}
+.splitter-v-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
   width: 1px;
   background: var(--border);
-  cursor: col-resize;
-  flex: 0 0 1px;
+  transition: background 0.15s ease;
+}
+.splitter-handle-v {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 2px;
+  border-radius: 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  color: var(--fg-3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.15s ease;
+}
+.splitter-v:hover .splitter-v-line {
+  background: var(--accent, #3b82f6);
+}
+.splitter-v:hover .splitter-handle-v {
+  border-color: var(--accent, #3b82f6);
+  color: var(--accent, #3b82f6);
+  box-shadow: 0 1px 5px rgba(59, 130, 246, 0.25);
 }
 
 /* Editor */

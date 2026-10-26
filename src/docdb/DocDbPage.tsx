@@ -48,11 +48,13 @@ const DocDbPage: React.FC<DocDbPageProps> = ({
   const [breadcrumbs, setBreadcrumbs] = useState<{ label: string; isFile?: boolean }[]>([]);
 
   const mainRef = useRef<HTMLElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const [editorHeight, setEditorHeight] = useState(50);
 
   const [rightPanelWidth, setRightPanelWidth] = useState(280);
   const isDraggingRight = useRef(false);
+  const [activeDrag, setActiveDrag] = useState<'h' | 'v' | null>(null);
 
   // Resize handlers
   const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -69,35 +71,62 @@ const DocDbPage: React.FC<DocDbPageProps> = ({
     document.removeEventListener("mousemove", handleMouseMove);
     document.removeEventListener("mouseup", handleMouseUp);
     document.body.style.cursor = "default";
+    document.body.style.userSelect = "";
+    setActiveDrag(null);
+    window.dispatchEvent(new Event("resize"));
   }, [handleMouseMove]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDragging.current = true;
+    setActiveDrag("h");
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
     document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
   }, [handleMouseMove, handleMouseUp]);
+
+  const containerRightRef = useRef<number>(0);
+  const rafId = useRef<number | null>(null);
 
   const handleRightMouseMove = useCallback((e: MouseEvent) => {
     if (!isDraggingRight.current) return;
-    const newWidth = window.innerWidth - e.clientX;
-    if (newWidth >= 180 && newWidth <= 520) setRightPanelWidth(newWidth);
+    const clientX = e.clientX;
+    if (rafId.current !== null) {
+      cancelAnimationFrame(rafId.current);
+    }
+    rafId.current = requestAnimationFrame(() => {
+      const containerRight = containerRightRef.current || (containerRef.current?.getBoundingClientRect().right ?? window.innerWidth);
+      const newWidth = containerRight - clientX;
+      if (newWidth >= 160 && newWidth <= 600) setRightPanelWidth(newWidth);
+    });
   }, []);
 
   const handleRightMouseUp = useCallback(() => {
     isDraggingRight.current = false;
+    if (rafId.current !== null) {
+      cancelAnimationFrame(rafId.current);
+      rafId.current = null;
+    }
     document.removeEventListener("mousemove", handleRightMouseMove);
     document.removeEventListener("mouseup", handleRightMouseUp);
     document.body.style.cursor = "default";
+    document.body.style.userSelect = "";
+    setActiveDrag(null);
+    window.dispatchEvent(new Event("resize"));
   }, [handleRightMouseMove]);
 
   const handleRightMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDraggingRight.current = true;
+    if (containerRef.current) {
+      containerRightRef.current = containerRef.current.getBoundingClientRect().right;
+    }
+    setActiveDrag("v");
     document.addEventListener("mousemove", handleRightMouseMove);
     document.addEventListener("mouseup", handleRightMouseUp);
     document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
   }, [handleRightMouseMove, handleRightMouseUp]);
 
   // Load and save state
@@ -359,7 +388,7 @@ const DocDbPage: React.FC<DocDbPageProps> = ({
         onExportJson={handleExportJson}
       />
 
-      <div className="docdb-main-layout">
+      <div className="docdb-main-layout" ref={containerRef}>
         {view === "connections" ? (
           <main className="db-main" style={{ display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
             <DocDbConnectionsView
@@ -389,19 +418,22 @@ const DocDbPage: React.FC<DocDbPageProps> = ({
               </div>
 
               {/* Horizontal divider row resize */}
-              <div
-                style={{
-                  height: 4,
-                  background: "var(--border)",
-                  cursor: "row-resize",
-                  width: "100%",
-                  zIndex: 20,
-                  transition: "background 0.2s",
-                }}
+              <div 
+                className="splitter-h" 
                 onMouseDown={handleMouseDown}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "var(--border)")}
-              />
+              >
+                <div className="splitter-h-line" />
+                <div className="splitter-handle-h" title="Resize panel">
+                  <svg width="18" height="6" viewBox="0 0 18 6" fill="none">
+                    <circle cx="3" cy="1.5" r="1" fill="currentColor" />
+                    <circle cx="9" cy="1.5" r="1" fill="currentColor" />
+                    <circle cx="15" cy="1.5" r="1" fill="currentColor" />
+                    <circle cx="3" cy="4.5" r="1" fill="currentColor" />
+                    <circle cx="9" cy="4.5" r="1" fill="currentColor" />
+                    <circle cx="15" cy="4.5" r="1" fill="currentColor" />
+                  </svg>
+                </div>
+              </div>
 
               <div className="col" style={{ flex: 1, minHeight: 0, height: 'calc(100% - ' + editorHeight + '%)', display: 'flex', flexDirection: 'column' }}>
                 <ResultSection
@@ -414,34 +446,51 @@ const DocDbPage: React.FC<DocDbPageProps> = ({
             </main>
 
             {/* Vertical divider panel resize */}
-            <div
-              style={{
-                width: 4,
-                background: "var(--border)",
-                cursor: "col-resize",
-                height: "100%",
-                zIndex: 20,
-                transition: "background 0.2s",
-              }}
-              onMouseDown={handleRightMouseDown}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--border)")}
-            />
+            <React.Fragment>
+              <div
+                className="splitter-v"
+                onMouseDown={handleRightMouseDown}
+              >
+                <div className="splitter-v-line" />
+                <div className="splitter-handle-v" title="Resize sidebar">
+                  <svg width="6" height="18" viewBox="0 0 6 18" fill="none">
+                    <circle cx="1.5" cy="3" r="1" fill="currentColor" />
+                    <circle cx="4.5" cy="3" r="1" fill="currentColor" />
+                    <circle cx="1.5" cy="9" r="1" fill="currentColor" />
+                    <circle cx="4.5" cy="9" r="1" fill="currentColor" />
+                    <circle cx="1.5" cy="15" r="1" fill="currentColor" />
+                    <circle cx="4.5" cy="15" r="1" fill="currentColor" />
+                  </svg>
+                </div>
+              </div>
 
-            <div style={{ width: rightPanelWidth }}>
-              <DocDbSidebar
-                collections={collections}
-                onSelectCollection={handleSelectCollection}
-                selectedCollection={selectedCollection}
-                connection={connections.find((c) => c.id === selectedConnectionId)}
-                database={selectedDatabase}
-                onSelectDatabase={_setSelectedDatabase}
-                onRefresh={loadCollections}
-              />
-            </div>
+              <div style={{ width: rightPanelWidth, flex: `0 0 ${rightPanelWidth}px` }}>
+                <DocDbSidebar
+                  collections={collections}
+                  onSelectCollection={handleSelectCollection}
+                  selectedCollection={selectedCollection}
+                  connection={connections.find((c) => c.id === selectedConnectionId)}
+                  database={selectedDatabase}
+                  onSelectDatabase={_setSelectedDatabase}
+                  onRefresh={loadCollections}
+                />
+              </div>
+            </React.Fragment>
           </React.Fragment>
         )}
       </div>
+
+      {activeDrag && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            cursor: activeDrag === 'h' ? 'row-resize' : 'col-resize',
+            userSelect: 'none',
+          }}
+        />
+      )}
     </div>
   );
 };

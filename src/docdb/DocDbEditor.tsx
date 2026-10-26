@@ -7,6 +7,7 @@ interface DocDbEditorProps {
   collections?: any[];
   language?: string;
   onExecute?: () => void;
+  readOnly?: boolean;
 }
 
 const MONGO_KEYWORDS = [
@@ -28,6 +29,7 @@ const DocDbEditor: React.FC<DocDbEditorProps> = ({
   collections = [],
   language,
   onExecute,
+  readOnly = false,
 }) => {
   const isDark = document.documentElement.getAttribute("data-theme") === "dark";
   const monacoRef = useRef<any>(null);
@@ -191,6 +193,8 @@ const DocDbEditor: React.FC<DocDbEditorProps> = ({
         onMount={handleEditorMount}
         onChange={(val) => onChange(val || "")}
         options={{
+          readOnly: Boolean(readOnly),
+          domReadOnly: Boolean(readOnly),
           minimap: { enabled: false },
           fontSize: 13,
           wordWrap: "on",

@@ -1,1 +1,11 @@
-/* Styles have been moved to index.css to match exact design system variables and classes */
+/* Styles for DBTopbar */
+.topbar-title-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior-x: contain;
+  overscroll-behavior: contain;
+}
+
+.topbar-title-scroll::-webkit-scrollbar {
+  display: none;
+}

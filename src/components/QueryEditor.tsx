@@ -10,6 +10,8 @@ interface QueryEditorProps {
   selectedConnectionId?: number | null;
   selectedDatabase?: string | null;
   onExecute?: () => void;
+  readOnly?: boolean;
+  theme?: string;
 }
 
 // SQL keywords for base completions
@@ -32,8 +34,10 @@ const QueryEditor: React.FC<QueryEditorProps> = ({
   selectedConnectionId,
   selectedDatabase,
   onExecute,
+  readOnly = false,
+  theme,
 }) => {
-  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  const isDark = theme ? theme === "dark" : document.documentElement.getAttribute("data-theme") === "dark";
   const monacoRef = useRef<any>(null);
   const editorRef = useRef<any>(null);
   const providerRef = useRef<any>(null);
@@ -255,6 +259,8 @@ const QueryEditor: React.FC<QueryEditorProps> = ({
           onMount={handleEditorMount}
           onChange={(val) => onChange(val || "")}
           options={{
+            readOnly: Boolean(readOnly),
+            domReadOnly: Boolean(readOnly),
             minimap: { enabled: false },
             fontSize: 13,
             wordWrap: "on",

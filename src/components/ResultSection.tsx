@@ -24,6 +24,7 @@ interface ResultSectionProps {
   isExecuting: boolean;
   theme?: "light" | "dark";
   fileName?: string;
+  onClose?: () => void;
 }
 
 const ResultSection: React.FC<ResultSectionProps> = ({
@@ -31,6 +32,7 @@ const ResultSection: React.FC<ResultSectionProps> = ({
   isExecuting,
   theme,
   fileName,
+  onClose,
 }) => {
   const [viewMode, setViewMode] = useState<"table" | "json">("table");
   const [expandedJson, setExpandedJson] = useState<{
@@ -376,6 +378,16 @@ const ResultSection: React.FC<ResultSectionProps> = ({
         <button className="btn btn-icon btn-ghost">
           <MoreHorizontal size={12} />
         </button>
+        {onClose && (
+          <button
+            className="btn btn-icon btn-ghost"
+            onClick={onClose}
+            title="Close results (return to full query)"
+            style={{ marginLeft: 2 }}
+          >
+            <X size={12} />
+          </button>
+        )}
       </div>
 
       {viewMode === "table" && data.length === 0 && (
