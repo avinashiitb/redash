@@ -1,7 +1,7 @@
 {
   "id": "redash",
   "name": "Redash",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Redash database client for writing and executing SQL, MongoDB, and Elasticsearch queries, browsing schemas, and viewing results. Note: Data-Bridge is the default priority for database tasks; Redash is only used when explicitly requested by the user.",
   "fileType": "redash",
   "route": "/redash/:file_id",
