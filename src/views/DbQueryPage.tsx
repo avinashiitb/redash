@@ -10,9 +10,9 @@ import { exportToCsv, exportToJson } from "../utils/exportUtils";
 import { extractSavedData } from "../utils/docUtils";
 import "./DbQueryPage.css";
 
-function extractResultStats(result: any): { hasResponse: boolean; rowCount: number; isError: boolean } {
-  if (!result) return { hasResponse: false, rowCount: 0, isError: false };
-  if (result.error) return { hasResponse: true, rowCount: 0, isError: true };
+function extractResultStats(result: any): { hasResponse: boolean; rowCount: number; isError: boolean; data: any } {
+  if (!result) return { hasResponse: false, rowCount: 0, isError: false, data: null };
+  if (result.error) return { hasResponse: true, rowCount: 0, isError: true, data: null };
 
   let data = null;
   if (Array.isArray(result)) {
@@ -28,6 +28,8 @@ function extractResultStats(result: any): { hasResponse: boolean; rowCount: numb
     } else {
       data = result.data;
     }
+  } else if (result?.data) {
+    data = result.data;
   }
 
   if (Array.isArray(data)) {
@@ -39,14 +41,15 @@ function extractResultStats(result: any): { hasResponse: boolean; rowCount: numb
       hasResponse: hasExecuted,
       rowCount: data.length,
       isError: false,
+      data,
     };
   }
 
   if (result.data || result.columns || typeof result.executionTime === "number") {
-    return { hasResponse: true, rowCount: 1, isError: false };
+    return { hasResponse: true, rowCount: 1, isError: false, data: result.data || result };
   }
 
-  return { hasResponse: false, rowCount: 0, isError: false };
+  return { hasResponse: false, rowCount: 0, isError: false, data: null };
 }
 
 interface DbQueryPageProps {
@@ -93,6 +96,29 @@ const DbQueryPage: React.FC<DbQueryPageProps> = ({
   const isDragging = useRef(false);
   // Dynamic response height & manual drag
   const [customResponseHeight, setCustomResponseHeight] = useState<number | null>(null);
+  const [responseViewMode, setResponseViewMode] = useState<"table" | "json">("table");
+  const [mainHeight, setMainHeight] = useState<number>(() => {
+    return typeof window !== "undefined" ? Math.max(400, window.innerHeight - 100) : 600;
+  });
+
+  useEffect(() => {
+    const updateHeight = () => {
+      if (mainRef.current) {
+        const h = mainRef.current.clientHeight;
+        if (h > 0) setMainHeight(h);
+      }
+    };
+    updateHeight();
+    const ro = new ResizeObserver(updateHeight);
+    if (mainRef.current) {
+      ro.observe(mainRef.current);
+    }
+    window.addEventListener("resize", updateHeight);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, [view]);
 
   const hasResponse = useMemo(() => {
     if (isExecuting) return true;
@@ -104,22 +130,64 @@ const DbQueryPage: React.FC<DbQueryPageProps> = ({
     setCustomResponseHeight(null);
   }, [result]);
 
+  const handleResponseViewModeChange = useCallback((mode: "table" | "json") => {
+    setResponseViewMode(mode);
+    setCustomResponseHeight(null);
+  }, []);
+
   const autoResponseHeight = useMemo(() => {
     if (!hasResponse) return 0;
-    if (isExecuting) return 120;
+
+    // Requirement: at least 30% min height when there is a response
+    const minAllowedHeight = Math.max(140, Math.round(mainHeight * 0.30));
+    // Maximum allowed height: leaves at least 100px for the query editor
+    const maxAllowedHeight = Math.max(minAllowedHeight, Math.round(mainHeight * 0.78));
+
+    if (isExecuting) return minAllowedHeight;
 
     const stats = extractResultStats(result);
-    if (stats.isError) return 110;
-    if (stats.rowCount === 0) return 110;
+    if (stats.isError || stats.rowCount === 0) {
+      return minAllowedHeight;
+    }
 
-    const rowsCount = Math.min(stats.rowCount, 10);
-    const rowsHeight = rowsCount * 28;
-    const paginationHeight = stats.rowCount > 10 ? 36 : 0;
-    const needed = 32 + 28 + rowsHeight + paginationHeight + 16;
+    let neededContentHeight = minAllowedHeight;
 
-    // Cap at 390px max, min 110px
-    return Math.min(390, Math.max(110, needed));
-  }, [hasResponse, isExecuting, result]);
+    if (responseViewMode === "json") {
+      // Calculate content height for JSON
+      let jsonLines = 10;
+      try {
+        const rawData = stats.data !== null && stats.data !== undefined ? stats.data : result;
+        const sample = Array.isArray(rawData) ? rawData.slice(0, 100) : rawData;
+        const jsonStr = JSON.stringify(sample, null, 2);
+        if (jsonStr) {
+          jsonLines = jsonStr.split("\n").length;
+        }
+      } catch (e) {
+        jsonLines = Math.max(10, stats.rowCount * 4);
+      }
+
+      // Toolbar is ~36px, monaco editor lines (~19px per line), padding/margins ~24px
+      const baseJsonHeight = 36 + (jsonLines * 19) + 24;
+      // Add 30% extra height
+      neededContentHeight = baseJsonHeight * 1.30;
+    } else {
+      // Calculate content height for Table view
+      // Toolbar: 36px
+      // <thead> header: 32px
+      // Table rows: ~34px per row (up to 15 visible rows)
+      // Pagination bar (if > 10 rows): ~44px
+      // Horizontal scrollbar & padding safety buffer: ~24px
+      const visibleRows = Math.min(stats.rowCount, 15);
+      const rowsHeight = visibleRows * 34;
+      const paginationHeight = stats.rowCount > 10 ? 44 : 0;
+      const baseTableHeight = 36 + 32 + rowsHeight + paginationHeight + 24;
+      // Add 30% extra height
+      neededContentHeight = baseTableHeight * 1.30;
+    }
+
+    // Dynamic height: at least 30% min, expanding up to maxAllowedHeight
+    return Math.min(maxAllowedHeight, Math.max(minAllowedHeight, Math.round(neededContentHeight)));
+  }, [hasResponse, isExecuting, result, mainHeight, responseViewMode]);
 
   const activeResponseHeight = customResponseHeight !== null ? customResponseHeight : autoResponseHeight;
 
@@ -159,7 +227,7 @@ const DbQueryPage: React.FC<DbQueryPageProps> = ({
     if (!isDragging.current || !mainRef.current) return;
     const rect = mainRef.current.getBoundingClientRect();
     const newHeight = rect.bottom - e.clientY;
-    const minHeight = 60;
+    const minHeight = Math.max(60, Math.round(rect.height * 0.15));
     const maxHeight = Math.max(minHeight, rect.height - 100);
     if (newHeight >= minHeight && newHeight <= maxHeight) {
       setCustomResponseHeight(newHeight);
@@ -544,6 +612,8 @@ const DbQueryPage: React.FC<DbQueryPageProps> = ({
                       fileName={fileName}
                       theme={theme as 'light' | 'dark'}
                       onClose={() => setResult(null)}
+                      viewMode={responseViewMode}
+                      onViewModeChange={handleResponseViewModeChange}
                     />
                   </div>
                 </React.Fragment>

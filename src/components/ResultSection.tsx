@@ -25,6 +25,8 @@ interface ResultSectionProps {
   theme?: "light" | "dark";
   fileName?: string;
   onClose?: () => void;
+  viewMode?: "table" | "json";
+  onViewModeChange?: (mode: "table" | "json") => void;
 }
 
 const ResultSection: React.FC<ResultSectionProps> = ({
@@ -33,8 +35,17 @@ const ResultSection: React.FC<ResultSectionProps> = ({
   theme,
   fileName,
   onClose,
+  viewMode: controlledViewMode,
+  onViewModeChange,
 }) => {
-  const [viewMode, setViewMode] = useState<"table" | "json">("table");
+  const [internalViewMode, setInternalViewMode] = useState<"table" | "json">("table");
+  const viewMode = controlledViewMode !== undefined ? controlledViewMode : internalViewMode;
+
+  const handleModeChange = (mode: "table" | "json") => {
+    setInternalViewMode(mode);
+    onViewModeChange?.(mode);
+  };
+
   const [expandedJson, setExpandedJson] = useState<{
     title: string;
     data: any;
@@ -181,13 +192,13 @@ const ResultSection: React.FC<ResultSectionProps> = ({
         <div className="seg">
           <button
             className={viewMode === "table" ? "on" : ""}
-            onClick={() => setViewMode("table")}
+            onClick={() => handleModeChange("table")}
           >
             <Table size={11} style={{ marginRight: 4 }} /> Table
           </button>
           <button
             className={viewMode === "json" ? "on" : ""}
-            onClick={() => setViewMode("json")}
+            onClick={() => handleModeChange("json")}
           >
             <span
               style={{ fontSize: 11, marginRight: 4, fontFamily: "monospace" }}
